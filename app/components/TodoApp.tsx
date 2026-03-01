@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 type Filter = 'all' | 'active' | 'completed';
 
@@ -14,35 +14,72 @@ export default function TodoApp() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('todos');
-    if (stored) setTodos(JSON.parse(stored));
-    setMounted(true);
+  const fetchTodos = useCallback(async () => {
+    try {
+      const res = await fetch('/api/todos');
+      const data = await res.json();
+      setTodos(data);
+    } catch (err) {
+      console.error('Failed to fetch todos:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (mounted) localStorage.setItem('todos', JSON.stringify(todos));
-  }, [todos, mounted]);
+    fetchTodos();
+  }, [fetchTodos]);
 
-  const add = () => {
+  const add = async () => {
     const text = input.trim();
     if (!text) return;
-    setTodos(prev => [...prev, { id: Date.now(), text, done: false }]);
     setInput('');
     inputRef.current?.focus();
+    try {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const newTodo = await res.json();
+      setTodos(prev => [newTodo, ...prev]);
+    } catch (err) {
+      console.error('Failed to add todo:', err);
+    }
   };
 
-  const toggle = (id: number) =>
+  const toggle = async (id: number) => {
     setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+    try {
+      await fetch(`/api/todos/${id}`, { method: 'PATCH' });
+    } catch (err) {
+      console.error('Failed to toggle todo:', err);
+      fetchTodos();
+    }
+  };
 
-  const remove = (id: number) =>
+  const remove = async (id: number) => {
     setTodos(prev => prev.filter(t => t.id !== id));
+    try {
+      await fetch(`/api/todos/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete todo:', err);
+      fetchTodos();
+    }
+  };
 
-  const clearCompleted = () =>
+  const clearCompleted = async () => {
     setTodos(prev => prev.filter(t => !t.done));
+    try {
+      await fetch('/api/todos', { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to clear completed:', err);
+      fetchTodos();
+    }
+  };
 
   const visible = todos.filter(t => {
     if (filter === 'active') return !t.done;
@@ -104,7 +141,11 @@ export default function TodoApp() {
 
         {/* リスト */}
         <ul className="flex flex-col gap-2 min-h-8">
-          {visible.length === 0 ? (
+          {loading ? (
+            <li className="text-center text-sm text-gray-400 py-8">
+              読み込み中...
+            </li>
+          ) : visible.length === 0 ? (
             <li className="text-center text-sm text-gray-400 py-8">
               タスクがありません
             </li>
