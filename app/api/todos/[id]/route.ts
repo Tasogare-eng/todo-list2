@@ -1,26 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/app/lib/db';
+import getDb from '@/app/lib/db';
 
 // PATCH: todoの完了状態をトグル
 export async function PATCH(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const numId = Number(id);
+  try {
+    const { id } = await params;
+    const numId = Number(id);
 
-  const todo = db.prepare('SELECT done FROM todos WHERE id = ?').get(numId) as
-    | { done: number }
-    | undefined;
+    const todo = getDb().prepare('SELECT done FROM todos WHERE id = ?').get(numId) as
+      | { done: number }
+      | undefined;
 
-  if (!todo) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
+    if (!todo) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 });
+    }
+
+    const newDone = todo.done === 1 ? 0 : 1;
+    getDb().prepare('UPDATE todos SET done = ? WHERE id = ?').run(newDone, numId);
+
+    return NextResponse.json({ id: numId, done: newDone === 1 });
+  } catch (err) {
+    console.error('PATCH /api/todos/[id] error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-
-  const newDone = todo.done === 1 ? 0 : 1;
-  db.prepare('UPDATE todos SET done = ? WHERE id = ?').run(newDone, numId);
-
-  return NextResponse.json({ id: numId, done: newDone === 1 });
 }
 
 // DELETE: 個別のtodoを削除
@@ -28,9 +33,14 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const numId = Number(id);
+  try {
+    const { id } = await params;
+    const numId = Number(id);
 
-  db.prepare('DELETE FROM todos WHERE id = ?').run(numId);
-  return NextResponse.json({ ok: true });
+    getDb().prepare('DELETE FROM todos WHERE id = ?').run(numId);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('DELETE /api/todos/[id] error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }

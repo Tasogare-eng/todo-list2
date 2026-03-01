@@ -1,28 +1,37 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-
-const dbPath = path.join(process.cwd(), 'data', 'todos.db');
-
-// Ensure data directory exists
 import fs from 'fs';
-const dir = path.dirname(dbPath);
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir, { recursive: true });
+
+function getDb() {
+  const dbPath = path.join(process.cwd(), 'data', 'todos.db');
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS todos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      done INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  return db;
 }
 
-const db = new Database(dbPath);
+// Singleton: reuse across requests
+let _db: ReturnType<typeof Database> | null = null;
 
-// Enable WAL mode for better concurrent performance
-db.pragma('journal_mode = WAL');
-
-// Create table if not exists
-db.exec(`
-  CREATE TABLE IF NOT EXISTS todos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    text TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`);
+function db() {
+  if (!_db) {
+    _db = getDb();
+  }
+  return _db;
+}
 
 export default db;
