@@ -1,37 +1,32 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { put, list } from '@vercel/blob';
 
-function getDb() {
-  const dbPath = path.join(process.cwd(), 'data', 'todos.db');
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+const BLOB_NAME = 'data.json';
 
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS todos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      text TEXT NOT NULL,
-      done INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
-  return db;
+export interface Todo {
+  id: number;
+  text: string;
+  done: boolean;
 }
 
-// Singleton: reuse across requests
-let _db: ReturnType<typeof Database> | null = null;
+// Blobから data.json を読み込む
+export async function readTodos(): Promise<Todo[]> {
+  try {
+    const { blobs } = await list({ prefix: BLOB_NAME });
+    const blob = blobs.find(b => b.pathname === BLOB_NAME);
+    if (!blob) return [];
 
-function db() {
-  if (!_db) {
-    _db = getDb();
+    const res = await fetch(blob.url);
+    const data: Todo[] = await res.json();
+    return data;
+  } catch {
+    return [];
   }
-  return _db;
 }
 
-export default db;
+// Blobに data.json を書き込む
+export async function writeTodos(todos: Todo[]): Promise<void> {
+  await put(BLOB_NAME, JSON.stringify(todos), {
+    access: 'public',
+    addRandomSuffix: false,
+  });
+}

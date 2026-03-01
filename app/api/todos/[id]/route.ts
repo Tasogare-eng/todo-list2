@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import getDb from '@/app/lib/db';
+import { readTodos, writeTodos } from '@/app/lib/db';
 
 // PATCH: todoの完了状態をトグル
 export async function PATCH(
@@ -10,18 +10,16 @@ export async function PATCH(
     const { id } = await params;
     const numId = Number(id);
 
-    const todo = getDb().prepare('SELECT done FROM todos WHERE id = ?').get(numId) as
-      | { done: number }
-      | undefined;
-
+    const todos = await readTodos();
+    const todo = todos.find(t => t.id === numId);
     if (!todo) {
       return NextResponse.json({ error: 'not found' }, { status: 404 });
     }
 
-    const newDone = todo.done === 1 ? 0 : 1;
-    getDb().prepare('UPDATE todos SET done = ? WHERE id = ?').run(newDone, numId);
+    todo.done = !todo.done;
+    await writeTodos(todos);
 
-    return NextResponse.json({ id: numId, done: newDone === 1 });
+    return NextResponse.json({ id: numId, done: todo.done });
   } catch (err) {
     console.error('PATCH /api/todos/[id] error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -37,7 +35,10 @@ export async function DELETE(
     const { id } = await params;
     const numId = Number(id);
 
-    getDb().prepare('DELETE FROM todos WHERE id = ?').run(numId);
+    const todos = await readTodos();
+    const filtered = todos.filter(t => t.id !== numId);
+    await writeTodos(filtered);
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/todos/[id] error:', err);
