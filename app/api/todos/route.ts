@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/app/lib/db';
 
+interface TodoRow {
+  id: number;
+  text: string;
+  done: number;
+}
+
 // GET: 全てのtodoを取得
 export async function GET() {
-  const todos = db.prepare('SELECT id, text, done FROM todos ORDER BY created_at DESC').all();
-  const result = todos.map((t: Record<string, unknown>) => ({
-    id: t.id as number,
-    text: t.text as string,
+  const todos = db.prepare('SELECT id, text, done FROM todos ORDER BY created_at DESC').all() as TodoRow[];
+  const result = todos.map(t => ({
+    id: t.id,
+    text: t.text,
     done: t.done === 1,
   }));
   return NextResponse.json(result);
